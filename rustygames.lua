@@ -1,7 +1,7 @@
 PLUGIN.Title = "Rusty Games"
 PLUGIN.Description = "An Oxide plugin inspired by movies such as The Hunger Games and Battle Royale."
 PLUGIN.Author = "DaGodz"
-PLUGIN.Version = "0.4"
+PLUGIN.Version = "1.0"
 
 if (not rustyGames) then
   rustyGames = {}
@@ -52,7 +52,7 @@ end
 
 function PLUGIN:CmdStartTheGames(netUser, cmd, args)
   if (netUser and not netUser:canAdmin()) then return end
-  self:StartTheGames()
+  self:StartTheGames(netUser)
 end
 
 function PLUGIN:CmdStopTheGames(netUser, cmd, args)
@@ -66,7 +66,7 @@ function PLUGIN:CmdStopTheGames(netUser, cmd, args)
   end
 end
 
-function PLUGIN:StartTheGames()
+function PLUGIN:StartTheGames(netUser)
   if (rustyGames.inProgress) then
     rust.Notice(netUser,"The Rusty Games are already in progress! You can abandon them with /stopthegames")
   else
@@ -77,6 +77,9 @@ function PLUGIN:StartTheGames()
       for i, netUser in pairs(netUsers) do
         table.insert(rustyGames.tributes, netUser.playerClient.userName)
       end
+      rust.RunServerCommand("falldamage.enabled false")
+      self:SpawnTributes()
+      timer.Once( 60, function() rust.RunServerCommand("falldamage.enabled true");  end )
       rustyGames.inProgress = true
       self:BroadcastChat(self.Config.say.start)
     end
@@ -86,6 +89,37 @@ end
 function PLUGIN:StopTheGames()
   rustyGames.inProgress = false
   rustyGames.tributes = {}
+end
+
+function PLUGIN:SpawnTributes()
+  points = #rustyGames.tributes
+  radius = 50
+  center = {}
+  center.x = 5500
+  center.y = 1000
+  center.z = -5250
+  slice = 2 * math.pi / points
+  coords = {}
+    
+  for i=1,points,1 do
+    
+    self:Log("SpawnTributes: i=" .. i .. " points=" .. points)
+    
+    angle = slice * i-1
+        
+    local b, targetuser = rust.FindNetUsersByName(rustyGames.tributes[i])
+    local coords = targetuser.playerClient.lastKnownPosition
+    
+    coords.x = math.floor(center.x + radius * math.cos(angle))
+    coords.y = math.floor(center.y + radius * math.sin(angle))
+		coords.z = center.z
+    
+    self:Log("Target user: " .. targetuser.playerClient.userName)
+    self:Log("Target X:" .. coords.x .. " Y:" .. coords.y .. " Z:" .. coords.z)
+	  if (b) then
+      rust.ServerManagement():TeleportPlayer(targetuser.playerClient.netPlayer, coords)
+	  end
+  end
 end
 
 function PLUGIN:OnSpawnPlayer(playerClient, useCamp, avatar)
@@ -112,7 +146,7 @@ function PLUGIN:FindTribute(userName)
 end
 
 function PLUGIN:CheckWin()
-  if (#rustyGames.tributes == 1) then
+  if (#rustyGames.tributes < 2) then
     self:BroadcastChat("There is only one player remaining! " .. rustyGames.tributes[1] .. " has won the Rusty Games!")
     self:StopTheGames()
   end
